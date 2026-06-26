@@ -20,15 +20,46 @@ tags:
 
 components:
   securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     Error:
       type: object
       properties:
         error: { type: string }
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+    Token:
+      type: object
+      properties:
+        token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_at: { type: string, format: date-time }
+        username: { type: string }
+    Event:
+      type: object
+      properties:
+        id: { type: string }
+        created_at: { type: string, format: date-time }
+        level: { type: string, enum: [info, warn, error] }
+        type: { type: string }
+        project_id: { type: string }
+        deployment_id: { type: string }
+        message: { type: string }
+        details: { type: string }
+    ImageInfo:
+      type: object
+      properties:
+        id: { type: string }
+        tags: { type: array, items: { type: string } }
+        size: { type: integer, format: int64 }
+        created: { type: integer, format: int64 }
     Project:
       type: object
       properties:
@@ -176,9 +207,38 @@ components:
         tag: { type: string }
 
 security:
-  - ApiKeyAuth: []
+  - BearerAuth: []
+
+tags:
+  - name: Auth
 
 paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Obtenir un token
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LoginInput' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Token' } } } }
+        '401': { description: Identifiants invalides }
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Renouveler le token (token valide requis)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Token' } } } }
+        '401': { description: Token invalide/expiré }
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Identité du token courant
+      responses:
+        '200': { description: OK }
+        '401': { description: Token invalide/expiré }
+
   /healthz:
     get:
       tags: [Health]
@@ -306,9 +366,24 @@ paths:
         '204': { description: Supprimé }
         '404': { description: Introuvable }
 
+  /api/v1/projects/{id}/events:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: limit, in: query, required: false, schema: { type: integer } }
+    get:
+      tags: [Deployments]
+      summary: Événements/historique d'un projet
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Event' } } } } }
+
   /api/v1/projects/{id}/deployments:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Deployments]
+      summary: Historique des déploiements d'un projet
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Deployment' } } } } }
     post:
       tags: [Deployments]
       summary: Créer un déploiement
@@ -375,6 +450,45 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StatusResponse' } } } }
         '404': { description: Introuvable }
+
+  /api/v1/deployments/{id}/events:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: limit, in: query, required: false, schema: { type: integer } }
+    get:
+      tags: [Deployments]
+      summary: Historique/événements d'un déploiement
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Event' } } } } }
+
+  /api/v1/deployments/{id}/containers/{cid}/logs:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: cid, in: path, required: true, schema: { type: string }, description: ID Docker du conteneur }
+      - { name: tail, in: query, required: false, schema: { type: integer, default: 200 } }
+    get:
+      tags: [Deployments]
+      summary: Logs d'un conteneur (stdout+stderr)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { logs: { type: string } } } } } }
+        '404': { description: Introuvable }
+        '502': { description: Erreur Docker Engine }
+
+  /api/v1/events:
+    parameters:
+      - { name: limit, in: query, required: false, schema: { type: integer } }
+    get:
+      tags: [Deployments]
+      summary: Flux global d'événements (activité + erreurs)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Event' } } } } }
+
+  /api/v1/images:
+    get:
+      tags: [Images]
+      summary: Lister les images présentes
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ImageInfo' } } } } }
 
   /api/v1/images/pull:
     post:

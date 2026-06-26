@@ -15,7 +15,14 @@ services:
       NATIF_LOG_LEVEL: "info"
       # The API talks to the engine through the mounted socket.
       NATIF_DOCKER_HOST: "unix:///var/run/docker.sock"
-      # NATIF_API_KEY: "change-me"   # uncomment to enforce API-key auth
+      # Authentication (token JWT). Change the credentials and set a stable secret.
+      NATIF_AUTH_ENABLED: "true"
+      NATIF_AUTH_USERNAME: "admin"
+      NATIF_AUTH_PASSWORD: "admin"        # CHANGE ME
+      # NATIF_JWT_SECRET: "change-me-long-random"   # else a random one is generated per start
+      NATIF_TOKEN_TTL: "1h"
+      # Retention: purge events/history older than N days (0 = keep forever).
+      NATIF_RETENTION_DAYS: "30"
     volumes:
       # Host Docker socke<t -> lets the API control the local engine.
       - /var/run/docker.sock:/var/run/docker.sock

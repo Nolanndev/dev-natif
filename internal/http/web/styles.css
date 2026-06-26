@@ -265,3 +265,20 @@ textarea.input { resize: vertical; min-height: 64px; font-family: var(--mono); f
   .menu-toggle { display: inline-grid !important; }
 }
 .menu-toggle { display: none; }
+
+/* ---------- Login gate ---------- */
+.login-backdrop { place-items: center; }
+.login-modal { width: min(400px, 100%); padding: 30px 28px; }
+.login-modal h2 { font-size: 19px; margin: 0 0 4px; font-weight: 600; }
+.login-brand { display: flex; align-items: center; gap: 11px; margin-bottom: 22px; }
+.login-brand .logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(140deg, var(--accent), oklch(0.55 0.17 300)); display: grid; place-items: center; color: var(--accent-ink); font-weight: 700; }
+.login-brand b { font-size: 15px; }
+.login-brand small { display: block; color: var(--faint); font-size: 11px; }
+
+/* ---------- Logs viewer ---------- */
+.logbox {
+  margin: 0; padding: 14px 16px; border-radius: var(--radius-sm);
+  background: oklch(0.13 0.01 265); border: 1px solid var(--border);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: oklch(0.86 0.02 150);
+  max-height: 56vh; overflow: auto; white-space: pre-wrap; word-break: break-word;
+}

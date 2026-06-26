@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // Sentinel errors used across layers. Adapters return these so the service and
@@ -45,6 +46,7 @@ type DeploymentRepository interface {
 	CreateDeployment(ctx context.Context, d *Deployment) error
 	GetDeployment(ctx context.Context, id string) (*Deployment, error)
 	ListDeployments(ctx context.Context) ([]*Deployment, error)
+	ListDeploymentsByProject(ctx context.Context, projectID string) ([]*Deployment, error)
 	UpdateDeployment(ctx context.Context, d *Deployment) error
 	DeleteDeployment(ctx context.Context, id string) error
 
@@ -58,6 +60,14 @@ type ServerRepository interface {
 	GetServer(ctx context.Context, id string) (*Server, error)
 	ListServers(ctx context.Context) ([]*Server, error)
 	DefaultServer(ctx context.Context) (*Server, error)
+}
+
+// EventRepository persists audit/history events and enforces retention.
+type EventRepository interface {
+	RecordEvent(ctx context.Context, e *Event) error
+	ListEvents(ctx context.Context, f EventFilter) ([]*Event, error)
+	// PurgeEventsBefore deletes events older than t; returns the count removed.
+	PurgeEventsBefore(ctx context.Context, t time.Time) (int64, error)
 }
 
 // ----------------------------------------------------------------------------
@@ -101,6 +111,22 @@ type ContainerSpec struct {
 	Ports         []PortBinding
 	Mounts        []Mount
 	RestartPolicy string
+
+	// Network is the user-defined network the container joins at creation time.
+	// Empty means the default bridge. Containers sharing a Network resolve each
+	// other by their Aliases (DNS), reproducing docker-compose behaviour.
+	Network string
+	// Aliases are the DNS names the container answers to on Network (typically
+	// the service name, shared by all replicas for round-robin resolution).
+	Aliases []string
+}
+
+// ImageInfo describes an image present on the engine.
+type ImageInfo struct {
+	ID      string   `json:"id"`
+	Tags    []string `json:"tags"`
+	Size    int64    `json:"size"`
+	Created int64    `json:"created"` // unix seconds
 }
 
 // ContainerInfo is the live state of a container as reported by the engine.
@@ -120,6 +146,7 @@ type DockerEngine interface {
 
 	PullImage(ctx context.Context, spec ImagePullSpec) error
 	BuildImage(ctx context.Context, spec ImageBuildSpec) error
+	ListImages(ctx context.Context) ([]ImageInfo, error)
 
 	CreateContainer(ctx context.Context, spec ContainerSpec) (id string, err error)
 	StartContainer(ctx context.Context, id string) error
@@ -127,9 +154,18 @@ type DockerEngine interface {
 	RemoveContainer(ctx context.Context, id string, force bool) error
 	InspectContainer(ctx context.Context, id string) (ContainerInfo, error)
 	ListContainersByLabel(ctx context.Context, labels map[string]string) ([]ContainerInfo, error)
+	// ContainerLogs returns the last `tail` lines of a container's combined
+	// stdout+stderr (tail <= 0 means a default cap).
+	ContainerLogs(ctx context.Context, id string, tail int) (string, error)
 
 	CreateVolume(ctx context.Context, name string, labels map[string]string) error
 	RemoveVolume(ctx context.Context, name string, force bool) error
+
+	// EnsureNetwork creates a user-defined bridge network if it does not exist.
+	EnsureNetwork(ctx context.Context, name string, labels map[string]string) error
+	RemoveNetwork(ctx context.Context, nameOrID string) error
+	// ListNetworksByLabel returns the IDs of networks carrying all given labels.
+	ListNetworksByLabel(ctx context.Context, labels map[string]string) ([]string, error)
 }
 
 // Label keys used to tag every engine resource created by the API. They make

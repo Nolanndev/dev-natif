@@ -41,6 +41,23 @@ Légende :  A ──< B  =  un A possède plusieurs B (1..N)
 | `deployments` | Instanciation d'un projet sur un serveur. | `project_id → projects` (CASCADE), `server_id → servers` |
 | `deployment_overrides` | Valeurs spécifiques au déploiement (env/port). | `deployment_id → deployments` (CASCADE) |
 | `containers` | Suivi runtime des conteneurs instanciés. | `deployment_id → deployments`, `service_id → services` (CASCADE) |
+| `events` | Historique/audit : cycle de vie des déploiements + erreurs daemon Docker. | *(aucune FK — voir ci-dessous)* |
+
+### Table `events` (historique & rétention)
+
+Colonnes : `id`, `created_at`, `level` (`info`/`warn`/`error`), `type`
+(`deployment.created|up|down|failed|deleted`, `image.pull|build`, `error.docker`),
+`project_id`, `deployment_id`, `message`, `details`.
+
+- **Pas de clé étrangère** : l'historique doit **survivre** à la suppression de son
+  projet/déploiement (valeur d'audit). Le nettoyage se fait donc par **âge**, pas par
+  cascade.
+- **Rétention** : les lignes plus vieilles que `NATIF_RETENTION_DAYS` (défaut 30 j)
+  sont supprimées au démarrage puis toutes les 6 h (`PurgeEventsBefore`).
+- Les **logs de conteneurs** ne sont pas stockés ici : ils sont lus en direct depuis
+  le Docker Engine à la demande (aucune charge en base).
+- Index : `idx_events_project(project_id, created_at)`,
+  `idx_events_deployment(deployment_id, created_at)`, `idx_events_created(created_at)`.
 
 ## Conventions de mapping (Go ↔ SQL)
 

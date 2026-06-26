@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -10,8 +11,10 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 )
 
@@ -40,7 +43,18 @@ func (e *Engine) CreateContainer(ctx context.Context, spec domain.ContainerSpec)
 		}
 	}
 
-	resp, err := e.cli.ContainerCreate(ctx, cfg, hostCfg, nil, nil, spec.Name)
+	// Attach to a user-defined network with DNS aliases when requested, so
+	// services and replicas resolve each other by name (docker-compose style).
+	var netCfg *network.NetworkingConfig
+	if spec.Network != "" {
+		netCfg = &network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				spec.Network: {Aliases: spec.Aliases},
+			},
+		}
+	}
+
+	resp, err := e.cli.ContainerCreate(ctx, cfg, hostCfg, netCfg, nil, spec.Name)
 	if err != nil {
 		return "", fmt.Errorf("container create %q: %w: %w", spec.Name, err, domain.ErrDockerEngine)
 	}
@@ -108,6 +122,34 @@ func (e *Engine) InspectContainer(ctx context.Context, id string) (domain.Contai
 		Health: health,
 		Labels: labels,
 	}, nil
+}
+
+// ContainerLogs returns the last `tail` lines of a container's combined
+// stdout+stderr. The engine stream is multiplexed, so it is demuxed via stdcopy.
+func (e *Engine) ContainerLogs(ctx context.Context, id string, tail int) (string, error) {
+	tailStr := "all"
+	if tail > 0 {
+		tailStr = strconv.Itoa(tail)
+	}
+	rc, err := e.cli.ContainerLogs(ctx, id, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Timestamps: true,
+		Tail:       tailStr,
+	})
+	if err != nil {
+		if client.IsErrNotFound(err) {
+			return "", domain.ErrNotFound
+		}
+		return "", fmt.Errorf("container logs %q: %w: %w", id, err, domain.ErrDockerEngine)
+	}
+	defer rc.Close()
+
+	var out bytes.Buffer
+	if _, err := stdcopy.StdCopy(&out, &out, rc); err != nil {
+		return "", fmt.Errorf("container logs demux %q: %w: %w", id, err, domain.ErrDockerEngine)
+	}
+	return out.String(), nil
 }
 
 // ListContainersByLabel returns all containers (running or stopped) that carry

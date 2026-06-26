@@ -103,9 +103,25 @@ CREATE TABLE IF NOT EXISTS containers (
     created_at          TIMESTAMP NOT NULL
 );
 
+-- Audit/history events (deployment lifecycle + Docker daemon errors). No FK so
+-- history survives deletion of its project/deployment; purged by age instead.
+CREATE TABLE IF NOT EXISTS events (
+    id            TEXT PRIMARY KEY,
+    created_at    TIMESTAMP NOT NULL,
+    level         TEXT NOT NULL DEFAULT 'info',
+    type          TEXT NOT NULL,
+    project_id    TEXT NOT NULL DEFAULT '',
+    deployment_id TEXT NOT NULL DEFAULT '',
+    message       TEXT NOT NULL DEFAULT '',
+    details       TEXT NOT NULL DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_services_project   ON services(project_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_project ON deployments(project_id);
 CREATE INDEX IF NOT EXISTS idx_containers_deploy  ON containers(deployment_id);
+CREATE INDEX IF NOT EXISTS idx_events_project    ON events(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_events_deployment ON events(deployment_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_events_created    ON events(created_at);
 
 -- Seed the single local engine target used by the MVP.
 INSERT OR IGNORE INTO servers(id, name, host, status)

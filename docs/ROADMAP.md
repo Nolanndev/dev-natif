@@ -14,13 +14,16 @@
 | Déploiement | P1 | ✅ |
 | État (running/partial/not-running) | P1 | ✅ |
 | Dépendances entre services | (bonus P1) | ✅ (tri topologique à l'`up`) |
-| Scaling (replicas) | P2 | ✅ **déjà fonctionnel** |
+| Scaling (replicas) | P2 | ✅ **fonctionnel** (alias DNS partagé) |
 | Multi-engine | P2 | 🟡 Préparé (entité `Server`, engine par serveur) |
-| Réseau (Network) | P3 | ⬜ Crochet prévu |
+| Réseau (Network) | P3 | 🟡 **Réseau par défaut par déploiement** (linking DNS) fait ; réseaux nommés multiples à exposer |
 | Secret | P3 | ⬜ Crochet prévu |
 | Label métier | P3 | 🟡 Labels de gestion en place ; labels utilisateur à exposer |
-| Sécurité (AAA) | transverse | 🟡 Middleware clé d'API (extensible JWT/OAuth) |
+| Sécurité (AAA) | transverse | ✅ **Tokens JWT** (login/refresh/expiration) |
 | Journalisation | transverse | ✅ slog JSON + request-id + log d'accès |
+| Historique / événements | transverse | ✅ Table `events` + erreurs daemon persistées |
+| Logs des conteneurs | transverse | ✅ Via API/UI (lecture en direct) |
+| Rétention des données | transverse | ✅ Purge auto > 30 j (configurable) |
 
 ## Phase 1 — MVP / POC ✅
 

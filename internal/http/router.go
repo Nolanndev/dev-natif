@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Nolanndev/dev-natif/internal/auth"
 	"github.com/Nolanndev/dev-natif/internal/domain"
 	"github.com/Nolanndev/dev-natif/internal/service"
 )
@@ -13,7 +14,7 @@ import (
 // Deps holds everything the HTTP layer needs. main.go constructs it.
 type Deps struct {
 	Logger      *slog.Logger
-	APIKey      string
+	Auth        *auth.Authenticator
 	Projects    *service.ProjectService
 	Deployments *service.DeploymentService
 	Servers     domain.ServerRepository
@@ -40,8 +41,15 @@ func NewRouter(d Deps) *gin.Engine {
 	r.GET("/healthz", h.healthz)
 	r.GET("/readyz", h.readyz)
 
+	// Login is public; everything else under /api/v1 requires a valid token.
+	r.POST("/api/v1/auth/login", h.login)
+
 	v1 := r.Group("/api/v1")
-	v1.Use(apiKeyAuth(d.APIKey))
+	v1.Use(authBearer(d.Auth))
+
+	// Auth (token lifecycle)
+	v1.POST("/auth/refresh", h.refresh)
+	v1.GET("/auth/me", h.me)
 
 	// Projects
 	v1.POST("/projects", h.createProject)
@@ -63,14 +71,22 @@ func NewRouter(d Deps) *gin.Engine {
 
 	// Deployments
 	v1.POST("/projects/:id/deployments", h.createDeployment)
+	v1.GET("/projects/:id/deployments", h.listProjectDeployments) // deployment history
+	v1.GET("/projects/:id/events", h.listProjectEvents)
 	v1.GET("/deployments", h.listDeployments)
 	v1.GET("/deployments/:id", h.getDeployment)
 	v1.DELETE("/deployments/:id", h.deleteDeployment)
 	v1.POST("/deployments/:id/up", h.upDeployment)
 	v1.POST("/deployments/:id/down", h.downDeployment)
 	v1.GET("/deployments/:id/status", h.statusDeployment)
+	v1.GET("/deployments/:id/events", h.listDeploymentEvents)
+	v1.GET("/deployments/:id/containers/:cid/logs", h.containerLogs)
+
+	// Events (global activity / errors feed)
+	v1.GET("/events", h.listEvents)
 
 	// Images
+	v1.GET("/images", h.listImages)
 	v1.POST("/images/pull", h.pullImage)
 	v1.POST("/images/build", h.buildImage)
 

@@ -2,7 +2,22 @@
 /* dev-natif Console — vanilla SPA consuming /api/v1. No build step. */
 
 const API = "/api/v1";
-let apiKey = localStorage.getItem("natif_api_key") || "";
+let token = localStorage.getItem("natif_token") || "";
+let tokenExp = localStorage.getItem("natif_token_exp") || "";
+let currentUser = localStorage.getItem("natif_user") || "";
+
+function setToken(t, exp, user) {
+  token = t; tokenExp = exp || ""; currentUser = user || currentUser;
+  localStorage.setItem("natif_token", token);
+  localStorage.setItem("natif_token_exp", tokenExp);
+  if (user) localStorage.setItem("natif_user", user);
+}
+function clearToken() {
+  token = ""; tokenExp = ""; currentUser = "";
+  localStorage.removeItem("natif_token");
+  localStorage.removeItem("natif_token_exp");
+  localStorage.removeItem("natif_user");
+}
 
 /* ----------------------------- helpers ----------------------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -20,12 +35,17 @@ const fmtDate = (s) => {
 
 async function api(method, path, body) {
   const headers = { "Content-Type": "application/json" };
-  if (apiKey) headers["X-API-Key"] = apiKey;
+  if (token) headers["Authorization"] = "Bearer " + token;
   const res = await fetch(API + path, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401 && path !== "/auth/login") {
+    clearToken();
+    showLogin();
+    throw new Error("Session expirée, reconnectez-vous");
+  }
   if (res.status === 204) return null;
   const txt = await res.text();
   let data = null;
@@ -140,6 +160,56 @@ function emptyState(icon, title, text, btn) {
     <div class="ico">${icon}</div><h3>${esc(title)}</h3><p>${esc(text)}</p>${btn || ""}</div></div>`;
 }
 
+/* ============================ EVENTS & LOGS ============================ */
+function evLevelClass(l) {
+  return l === "error" ? "failed" : l === "warn" ? "partially-running" : "neutral";
+}
+function eventRow(e) {
+  return `<div class="row"><div class="grow">
+      <div class="name" style="font-weight:500">${esc(e.message || e.type)}</div>
+      <div class="meta">${esc(fmtDate(e.created_at))} · <span class="mono">${esc(e.type)}</span></div></div>
+    <span class="badge ${evLevelClass(e.level)}"><span class="dot"></span>${esc(e.level)}</span></div>`;
+}
+async function loadEventsInto(sel, path) {
+  const box = $(sel);
+  if (!box) return;
+  let evs;
+  try { evs = await api("GET", path); }
+  catch (e) { box.innerHTML = `<div class="muted" style="padding:14px">${esc(e.message)}</div>`; return; }
+  box.innerHTML = (evs && evs.length)
+    ? evs.map(eventRow).join("")
+    : `<div class="muted" style="padding:14px">Aucun événement pour l'instant.</div>`;
+}
+
+// openLogs shows a container's logs with a refreshable, scrollable viewer.
+function openLogs(depId, cid, name) {
+  openModal({
+    title: `Logs · ${name}`, wide: true,
+    bodyHTML: `
+      <div class="toolbar" style="margin-bottom:10px">
+        <label class="muted" style="font-size:12.5px">Lignes</label>
+        <select class="select" id="log-tail" style="width:auto">
+          <option>100</option><option selected>200</option><option>500</option><option>1000</option></select>
+        <button class="btn btn-sm" id="log-refresh">${ICON.refresh} Rafraîchir</button>
+      </div>
+      <pre id="log-pre" class="logbox">Chargement…</pre>`,
+    footHTML: `<button class="btn" data-close>Fermer</button>`,
+    onMount: (root) => {
+      const load = async () => {
+        const pre = $("#log-pre", root); pre.textContent = "Chargement…";
+        try {
+          const d = await api("GET", `/deployments/${depId}/containers/${cid}/logs?tail=${$("#log-tail", root).value}`);
+          pre.textContent = d.logs && d.logs.trim() ? d.logs : "(aucune sortie)";
+          pre.scrollTop = pre.scrollHeight;
+        } catch (e) { pre.textContent = e.message; }
+      };
+      $("#log-refresh", root).onclick = load;
+      $("#log-tail", root).onchange = load;
+      load();
+    },
+  });
+}
+
 /* ============================ PROJECTS ============================ */
 async function renderProjects() {
   setActions(`<button class="btn btn-primary" id="new-project">${ICON.plus} Nouveau projet</button>`);
@@ -232,6 +302,17 @@ async function renderProjectDetail(id) {
             <button class="icon-btn" data-delvol="${esc(v.id)}">${ICON.trash}</button></div>`).join("") :
           `<div class="muted" style="padding:6px 2px">Aucun volume.</div>`}</div>
       </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Historique des déploiements</h2><div class="spacer"></div></div>
+      <div class="list" id="dep-history"><div class="skel-row"><div class="skel" style="width:40%"></div></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Activité &amp; erreurs</h2><div class="spacer"></div>
+        <button class="btn btn-sm btn-ghost" id="ev-refresh">${ICON.refresh}</button></div>
+      <div class="list" id="proj-events"><div class="skel-row"><div class="skel" style="width:50%"></div></div></div>
     </div>`;
 
   $("#cb").onclick = () => go("projects");
@@ -257,6 +338,29 @@ async function renderProjectDetail(id) {
     try { await api("DELETE", `/projects/${id}/services/${b.dataset.delsvc}`); toast("Service supprimé"); renderProjectDetail(id); }
     catch (e) { toast(e.message, false); }
   }));
+
+  // Deployment history + activity/error feed for this project.
+  $("#ev-refresh").onclick = () => loadEventsInto("#proj-events", `/projects/${id}/events`);
+  loadEventsInto("#proj-events", `/projects/${id}/events`);
+  loadProjectDeployments(id);
+}
+
+async function loadProjectDeployments(id) {
+  const box = $("#dep-history");
+  if (!box) return;
+  let deps;
+  try { deps = await api("GET", `/projects/${id}/deployments`); }
+  catch (e) { box.innerHTML = `<div class="muted" style="padding:14px">${esc(e.message)}</div>`; return; }
+  if (!deps || !deps.length) {
+    box.innerHTML = `<div class="empty" style="padding:26px"><p>Aucun déploiement pour ce projet. Cliquez sur « Déployer ».</p></div>`;
+    return;
+  }
+  box.innerHTML = deps.map((d) => `
+    <div class="row clickable" data-godep="${esc(d.id)}">
+      <div class="grow"><div class="name">${esc(d.name)} ${statusBadge(d.status)}</div>
+        <div class="meta">créé ${esc(fmtDate(d.created_at))} · maj ${esc(fmtDate(d.updated_at))}</div></div>
+      <button class="btn btn-sm" data-godep="${esc(d.id)}">Voir</button></div>`).join("");
+  $$("[data-godep]", box).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); go("deployments", { id: b.dataset.godep }); }));
 }
 
 function svcRow(s) {
@@ -491,11 +595,17 @@ async function renderDeploymentDetail(id) {
       <div class="panel"><div class="panel-head"><h2>Conteneurs</h2><span class="badge neutral">${containers.length}</span></div>
         <div class="list">${containers.length ? containers.map((c) => `
           <div class="row"><div class="grow"><div class="name">${esc(c.name)} <span class="badge ${c.state === "running" ? "running" : "not-running"}" style="margin-left:6px"><span class="dot"></span>${esc(c.state)}</span></div>
-            <div class="meta mono">${esc(shortId(c.docker_container_id))} · santé ${esc(c.health || "none")} · service ${esc(shortId(c.service_id))}</div></div></div>`).join("") :
-          `<div class="empty" style="padding:30px"><p>Aucun conteneur actif. Lancez le déploiement avec « Up ».</p></div>`}</div></div>`;
+            <div class="meta mono">${esc(shortId(c.docker_container_id))} · santé ${esc(c.health || "none")} · service ${esc(shortId(c.service_id))}</div></div>
+            ${c.docker_container_id ? `<button class="btn btn-sm" data-logs="${esc(c.docker_container_id)}" data-cname="${esc(c.name)}">Logs</button>` : ""}</div>`).join("") :
+          `<div class="empty" style="padding:30px"><p>Aucun conteneur actif. Lancez le déploiement avec « Up ».</p></div>`}</div></div>
+
+      <div class="panel"><div class="panel-head"><h2>Activité &amp; erreurs</h2><div class="spacer"></div></div>
+        <div class="list" id="dep-events"><div class="skel-row"><div class="skel" style="width:50%"></div></div></div></div>`;
     $("#cb").onclick = () => go("deployments");
     $("#refresh").onclick = () => paint(false);
     bindDeployActions($("#content"), () => paint(false));
+    $$("[data-logs]", $("#content")).forEach((b) => (b.onclick = () => openLogs(id, b.dataset.logs, b.dataset.cname)));
+    loadEventsInto("#dep-events", `/deployments/${id}/events`);
   };
   await paint(false);
   clearPoll();
@@ -503,8 +613,30 @@ async function renderDeploymentDetail(id) {
 }
 
 /* ============================ IMAGES ============================ */
+function fmtBytes(n) {
+  if (!n) return "—";
+  const u = ["o", "Ko", "Mo", "Go"]; let i = 0; let v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return v.toFixed(v >= 10 || i === 0 ? 0 : 1) + " " + u[i];
+}
+
+async function loadImages() {
+  const box = $("#img-list");
+  if (!box) return;
+  let imgs;
+  try { imgs = await api("GET", "/images"); } catch (e) { box.innerHTML = `<div class="muted" style="padding:14px">${esc(e.message)}</div>`; return; }
+  const tagged = (imgs || []).filter((i) => (i.tags || []).length && !i.tags.includes("<none>:<none>"));
+  if (!tagged.length) {
+    box.innerHTML = `<div class="empty" style="padding:30px"><p>Aucune image. Récupérez-en une avec « Pull » ci-dessus.</p></div>`;
+    return;
+  }
+  box.innerHTML = tagged.map((i) => `
+    <div class="row"><div class="grow"><div class="name">${esc((i.tags || []).join(", "))}</div>
+      <div class="meta mono">${esc(shortId((i.id || "").replace("sha256:", "")))} · ${fmtBytes(i.size)}</div></div></div>`).join("");
+}
+
 function renderImages() {
-  setActions("");
+  setActions(`<button class="btn" id="img-refresh">${ICON.refresh} Rafraîchir</button>`);
   $("#content").innerHTML = `
     <div class="grid-cards">
       <div class="panel"><div class="panel-head"><h2>Récupérer une image (pull)</h2></div><div class="panel-body">
@@ -518,12 +650,15 @@ function renderImages() {
         <div class="field"><label>Tag</label><input class="input" id="b-tag" placeholder="ex. monapp:latest" /></div>
         <button class="btn btn-primary" id="build-btn">${ICON.plus} Build</button>
       </div></div>
-    </div>`;
+    </div>
+    <div class="panel" style="margin-top:18px"><div class="panel-head"><h2>Images présentes</h2><div class="spacer"></div></div>
+      <div class="list" id="img-list"><div class="skel-row"><div class="skel" style="width:40%"></div></div></div></div>`;
+  $("#img-refresh").onclick = loadImages;
   $("#pull-btn").onclick = async () => {
     const ref = $("#pull-ref").value.trim();
     if (!ref) return toast("Référence requise", false);
     const btn = $("#pull-btn"); btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Pull…`;
-    try { await api("POST", "/images/pull", { ref, auth: $("#pull-auth").value.trim() }); toast("Image récupérée : " + ref); }
+    try { await api("POST", "/images/pull", { ref, auth: $("#pull-auth").value.trim() }); toast("Image récupérée : " + ref); loadImages(); }
     catch (e) { toast(e.message, false); }
     finally { btn.disabled = false; btn.innerHTML = `${ICON.down} Pull`; }
   };
@@ -531,10 +666,11 @@ function renderImages() {
     const context_dir = $("#b-ctx").value.trim(), tag = $("#b-tag").value.trim();
     if (!context_dir || !tag) return toast("Context dir et tag requis", false);
     const btn = $("#build-btn"); btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Build…`;
-    try { await api("POST", "/images/build", { context_dir, dockerfile: $("#b-file").value.trim(), tag }); toast("Image construite : " + tag); }
+    try { await api("POST", "/images/build", { context_dir, dockerfile: $("#b-file").value.trim(), tag }); toast("Image construite : " + tag); loadImages(); }
     catch (e) { toast(e.message, false); }
     finally { btn.disabled = false; btn.innerHTML = `${ICON.plus} Build`; }
   };
+  loadImages();
 }
 
 /* ============================ SERVERS ============================ */
@@ -550,21 +686,95 @@ async function renderServers() {
     <p class="muted" style="margin-top:14px;font-size:12.5px">Le MVP gère un seul serveur local. Le multi-engine est prévu en Phase 2.</p>`;
 }
 
+/* ============================ AUTH (login / session) ============================ */
+function expLabel() {
+  if (!tokenExp) return "—";
+  const d = new Date(tokenExp);
+  if (isNaN(d)) return "—";
+  const mins = Math.round((d - new Date()) / 60000);
+  return `${d.toLocaleString()} (${mins > 0 ? "dans " + mins + " min" : "expiré"})`;
+}
+
+// showLogin renders a full-screen login gate. Used on startup 401 and on logout.
+function showLogin() {
+  clearPoll();
+  const root = $("#modal-root");
+  root.innerHTML = `
+    <div class="backdrop login-backdrop">
+      <div class="modal login-modal" role="dialog" aria-modal="true">
+        <div class="login-brand"><div class="logo">n</div><div><b>dev-natif</b><small>Console Docker</small></div></div>
+        <h2>Connexion</h2>
+        <p class="muted" style="margin:0 0 18px;font-size:13px">Authentifiez-vous pour accéder à l'API.</p>
+        <form id="login-form">
+          <div class="field"><label>Utilisateur</label><input class="input" id="lg-user" autocomplete="username" value="admin" /></div>
+          <div class="field"><label>Mot de passe</label><input class="input" id="lg-pass" type="password" autocomplete="current-password" placeholder="••••••" /></div>
+          <button class="btn btn-primary" id="lg-btn" type="submit" style="width:100%;margin-top:6px">Se connecter</button>
+        </form>
+        <p class="faint" style="font-size:12px;margin:16px 0 0;text-align:center">Identifiants par défaut : admin / admin</p>
+      </div>
+    </div>`;
+  const form = $("#login-form", root);
+  $("#lg-user", root).focus();
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $("#lg-btn", root); btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Connexion…`;
+    try {
+      const data = await api("POST", "/auth/login", {
+        username: $("#lg-user", root).value.trim(),
+        password: $("#lg-pass", root).value,
+      });
+      setToken(data.token, data.expires_at, data.username);
+      closeModal();
+      toast("Connecté");
+      pollEngine();
+      applyRoute();
+    } catch (err) {
+      btn.disabled = false; btn.innerHTML = "Se connecter";
+      toast(err.message || "Échec de connexion", false);
+    }
+  };
+}
+
+function logout() {
+  clearToken();
+  closeModal();
+  toast("Déconnecté");
+  showLogin();
+}
+
+async function renewToken(silent) {
+  if (!token) return;
+  try {
+    const data = await api("POST", "/auth/refresh");
+    setToken(data.token, data.expires_at, data.username);
+    if (!silent) toast("Token renouvelé");
+  } catch {
+    if (!silent) toast("Renouvellement impossible", false);
+  }
+}
+
+// autoRenew refreshes the token when it is close to expiry.
+async function autoRenew() {
+  if (!token || !tokenExp) return;
+  const d = new Date(tokenExp);
+  if (isNaN(d)) return;
+  if (d - new Date() < 5 * 60 * 1000) await renewToken(true);
+}
+
 /* ============================ SETTINGS ============================ */
 function openSettings() {
   openModal({
-    title: "Réglages",
+    title: "Session & réglages",
     bodyHTML: `
-      <div class="field"><label>Clé d'API (X-API-Key)</label>
-        <input class="input" id="set-key" value="${esc(apiKey)}" placeholder="laisser vide si l'API n'exige pas de clé" />
-        <span class="hint">Requise uniquement si l'API a démarré avec NATIF_API_KEY. Stockée localement dans ce navigateur.</span></div>`,
-    footHTML: `<button class="btn" data-close>Fermer</button><button class="btn btn-primary" id="set-save">Enregistrer</button>`,
+      <dl class="kv">
+        <dt>Utilisateur</dt><dd>${esc(currentUser || "—")}</dd>
+        <dt>Token expire</dt><dd id="set-exp">${esc(expLabel())}</dd>
+      </dl>
+      <p class="muted" style="font-size:12.5px;margin-top:14px">Le token expire automatiquement et se renouvelle peu avant l'échéance. Vous pouvez le renouveler manuellement.</p>`,
+    footHTML: `<button class="btn btn-danger" id="set-logout">Se déconnecter</button><div style="flex:1"></div><button class="btn" data-close>Fermer</button><button class="btn btn-primary" id="set-renew">Renouveler le token</button>`,
     onMount: (root) => {
-      $("#set-save", root).onclick = () => {
-        apiKey = $("#set-key", root).value.trim();
-        localStorage.setItem("natif_api_key", apiKey);
-        closeModal(); toast("Réglages enregistrés"); pollEngine(); render();
-      };
+      $("#set-renew", root).onclick = async () => { await renewToken(false); const e = $("#set-exp", root); if (e) e.textContent = expLabel(); };
+      $("#set-logout", root).onclick = logout;
     },
   });
 }
@@ -589,5 +799,6 @@ $("#menu-toggle").onclick = () => $("#sidebar").classList.toggle("open");
 window.addEventListener("hashchange", applyRoute);
 pollEngine();
 setInterval(pollEngine, 8000);
+setInterval(autoRenew, 60000);
 if (!location.hash) location.hash = "#/projects";
 else applyRoute();

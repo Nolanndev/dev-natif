@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Nolanndev/dev-natif/internal/auth"
 	"github.com/Nolanndev/dev-natif/internal/config"
 	dockeng "github.com/Nolanndev/dev-natif/internal/docker"
 	httpapi "github.com/Nolanndev/dev-natif/internal/http"
@@ -48,14 +49,57 @@ func main() {
 	}
 	cancel()
 
+	// --- Authentication -----------------------------------------------------
+	authn := auth.New(auth.Config{
+		Enabled:  cfg.AuthEnabled,
+		Username: cfg.AuthUsername,
+		Password: cfg.AuthPassword,
+		Secret:   cfg.JWTSecret,
+		TTL:      cfg.TokenTTL,
+	})
+	if cfg.AuthEnabled {
+		if cfg.AuthPassword == "admin" {
+			logger.Warn("auth enabled with the default password 'admin' — set NATIF_AUTH_PASSWORD")
+		}
+		if authn.UsesGeneratedSecret() {
+			logger.Warn("NATIF_JWT_SECRET not set — using a random secret; tokens won't survive a restart")
+		}
+		logger.Info("api authentication enabled", "token_ttl", cfg.TokenTTL.String())
+	} else {
+		logger.Warn("api authentication is DISABLED (set NATIF_AUTH_ENABLED=true to enforce)")
+	}
+
 	// --- Use-case services --------------------------------------------------
 	projectSvc := service.NewProjectService(st)
-	deploymentSvc := service.NewDeploymentService(st, st, st, engine)
+	deploymentSvc := service.NewDeploymentService(st, st, st, engine, st)
+
+	// --- Retention: purge events/history older than the window --------------
+	if cfg.RetentionDays > 0 {
+		retention := time.Duration(cfg.RetentionDays) * 24 * time.Hour
+		go func() {
+			purge := func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if n, err := st.PurgeEventsBefore(ctx, time.Now().Add(-retention)); err != nil {
+					logger.Warn("event purge failed", "error", err)
+				} else if n > 0 {
+					logger.Info("purged old events", "count", n, "older_than_days", cfg.RetentionDays)
+				}
+			}
+			purge() // once at startup
+			t := time.NewTicker(6 * time.Hour)
+			defer t.Stop()
+			for range t.C {
+				purge()
+			}
+		}()
+		logger.Info("event retention enabled", "days", cfg.RetentionDays)
+	}
 
 	// --- HTTP layer ---------------------------------------------------------
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
-		APIKey:      cfg.APIKey,
+		Auth:        authn,
 		Projects:    projectSvc,
 		Deployments: deploymentSvc,
 		Servers:     st,

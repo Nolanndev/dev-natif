@@ -56,18 +56,4 @@ func recovery(logger *slog.Logger) gin.HandlerFunc {
 	}
 }
 
-// apiKeyAuth enforces a static API key when one is configured (AAA hook). When
-// key is empty the middleware is a no-op (MVP default).
-func apiKeyAuth(key string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if key == "" {
-			c.Next()
-			return
-		}
-		if c.GetHeader("X-API-Key") != key {
-			c.AbortWithStatusJSON(401, gin.H{"error": "unauthorized"})
-			return
-		}
-		c.Next()
-	}
-}
+// Token authentication is provided by authBearer (see auth_handler.go).

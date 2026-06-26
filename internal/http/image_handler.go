@@ -6,6 +6,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func (h *handler) listImages(c *gin.Context) {
+	imgs, err := h.d.Deployments.ListImages(c.Request.Context())
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, imgs)
+}
+
 func (h *handler) pullImage(c *gin.Context) {
 	var req pullImageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

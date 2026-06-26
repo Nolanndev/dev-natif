@@ -55,3 +55,21 @@ func (e *Engine) BuildImage(ctx context.Context, spec domain.ImageBuildSpec) err
 	}
 	return nil
 }
+
+// ListImages returns the images present on the engine.
+func (e *Engine) ListImages(ctx context.Context) ([]domain.ImageInfo, error) {
+	summaries, err := e.cli.ImageList(ctx, image.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("image list: %w: %w", err, domain.ErrDockerEngine)
+	}
+	out := make([]domain.ImageInfo, 0, len(summaries))
+	for _, s := range summaries {
+		out = append(out, domain.ImageInfo{
+			ID:      s.ID,
+			Tags:    s.RepoTags,
+			Size:    s.Size,
+			Created: s.Created,
+		})
+	}
+	return out, nil
+}

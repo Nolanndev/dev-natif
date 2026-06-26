@@ -38,9 +38,10 @@ et se testent contre des **interfaces**, et les adaptateurs sont interchangeable
 | `internal/domain` | Entités (`Project`, `Service`, `Deployment`, …) + **ports** (`ProjectRepository`, `DeploymentRepository`, `ServerRepository`, `DockerEngine`) + erreurs sentinelles + constantes de labels. | *(aucune)* |
 | `internal/config` | Chargement de la configuration depuis l'environnement. | — |
 | `internal/logging` | Logger structuré `slog` (JSON). | — |
-| `internal/store` | Implémente les 3 *Repository* via SQLite (`modernc.org/sqlite`, pur-Go). Migrations embarquées. | `domain` |
-| `internal/docker` | Implémente `DockerEngine` via le SDK Docker officiel. | `domain` |
-| `internal/service` | **Use-cases** : validation, résolution des overrides, tri topologique des dépendances, orchestration `up`/`down`, calcul d'état. | `domain` |
+| `internal/store` | Implémente les *Repository* (projets, déploiements, serveurs, **événements**) via SQLite (`modernc.org/sqlite`, pur-Go). Migrations embarquées. | `domain` |
+| `internal/docker` | Implémente `DockerEngine` via le SDK Docker officiel : conteneurs, images, volumes, **réseaux**, **logs**. | `domain` |
+| `internal/service` | **Use-cases** : validation, résolution des overrides, tri topologique, orchestration `up`/`down`, calcul d'état, **enregistrement des événements**. | `domain` |
+| `internal/auth` | Tokens **JWT HS256** : `Login`, `Refresh`, `Parse` (expiration). Sans dépendance transport. | `golang-jwt` |
 | `internal/http` | Couche de livraison **Gin** : router, middlewares (request-id, log, recovery, api-key), DTO, handlers, mapping erreur→HTTP. Sert aussi la **console web** embarquée. | `domain`, `service` |
 | `internal/http/web` | **Console web** : SPA statique (vanilla JS/CSS, sans build) embarquée via `go:embed`, servie *same-origin* sur `/` (redirige vers `/app/`). Consomme uniquement `/api/v1`. | *(assets statiques)* |
 
@@ -130,13 +131,46 @@ Règle d'agrégation (`computeStatus`) :
   concrètes. C'est le mécanisme qui rend un projet réutilisable.
 - **Arrêt gracieux** : `SIGINT`/`SIGTERM` → `server.Shutdown` avec timeout.
 
-## 8. Extensibilité (P2/P3) — déjà préparée
+## 8. Sous-systèmes transverses
 
-| Évolution | Préparation présente |
-|-----------|----------------------|
-| **Scaling** (P2) | `Service.Replicas` + table `containers` 1..N ; `Up` boucle déjà sur les replicas (vérifié). |
-| **Multi-engine** (P2) | entité `Server`, `deployments.server_id`, `DockerEngine` instanciable par serveur. |
-| **Réseaux** (P3) | à ajouter : entité `Network` + table + champ réseau du conteneur. |
-| **Secrets** (P3) | à ajouter : entité `Secret` + injection (montage/tmpfs/env). |
-| **Labels métier** (P3) | labels déjà gérés ; exposer des labels utilisateur par service. |
-| **AAA / sécurité** | middleware `apiKeyAuth` en place ; remplaçable par JWT/OAuth. |
+### Réseau par déploiement (linking type docker-compose)
+À l'`up`, un réseau bridge dédié `devnatif_net_<deploymentID>` est créé et **tous**
+les conteneurs du déploiement (services et replicas) y sont attachés avec un **alias
+DNS = nom du service**. Conséquence : `web` joint `db` par son nom, et les replicas
+d'un service partagent l'alias (round-robin DNS) — comportement du réseau par défaut
+de docker-compose. Le réseau est supprimé au `down` et au `delete` (par label).
+
+### Authentification (JWT)
+`internal/auth` émet des tokens **JWT HS256** signés portant `sub` + `exp`. Le
+middleware `authBearer` valide `Authorization: Bearer …` sur `/api/v1/*` (sauf
+`/auth/login`). `Refresh` ré-émet un token à partir d'un token valide (renouvellement
+avant expiration). Le secret, les identifiants et le TTL sont configurables ; un
+secret aléatoire est généré si absent (avec avertissement).
+
+### Historique & événements
+Chaque étape de cycle de vie (`deployment.created|up|down|failed|deleted`,
+`image.pull|build`) et chaque **erreur du daemon Docker** (`error.docker`,
+`deployment.failed`) est enregistrée dans la table `events` (niveau `info`/`warn`/
+`error`). Le service les écrit en *best effort* (jamais bloquant). L'UI les affiche
+en panneaux « Activité & erreurs » — les erreurs daemon restent ainsi lisibles, pas
+seulement renvoyées dans la réponse HTTP.
+
+### Logs des conteneurs
+`DockerEngine.ContainerLogs` lit le flux multiplexé du moteur, le démultiplexe
+(`stdcopy`) et renvoie stdout+stderr horodatés. Les logs ne sont **pas** stockés en
+base (lus à la demande).
+
+### Rétention
+Une goroutine de `cmd/api` purge les événements plus vieux que `NATIF_RETENTION_DAYS`
+(défaut 30) au démarrage puis toutes les 6 h, pour borner la taille de la base.
+
+## 9. Extensibilité restante (P2/P3)
+
+| Évolution | État / préparation |
+|-----------|--------------------|
+| **Scaling** (P2) | ✅ `Service.Replicas`, `Up` boucle sur les replicas, alias DNS partagé. |
+| **Multi-engine** (P2) | 🟡 entité `Server`, `deployments.server_id`, `DockerEngine` instanciable par serveur (factory à ajouter). |
+| **Réseaux** (P3) | 🟡 réseau **par défaut par déploiement** fait ; réseaux multiples nommés à exposer. |
+| **Secrets** (P3) | ⬜ entité `Secret` + injection (montage/tmpfs/env). |
+| **Labels métier** (P3) | 🟡 labels de gestion gérés ; labels utilisateur par service à exposer. |
+| **AAA / sécurité** | ✅ tokens JWT (login/refresh/expiration) ; extensible (utilisateurs multiples, rôles, OAuth). |

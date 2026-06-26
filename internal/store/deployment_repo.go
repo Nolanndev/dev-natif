@@ -87,6 +87,27 @@ func (s *Store) ListDeployments(ctx context.Context) ([]*domain.Deployment, erro
 	return out, rows.Err()
 }
 
+// ListDeploymentsByProject returns the deployments of one project, newest first
+// (the project's deployment history).
+func (s *Store) ListDeploymentsByProject(ctx context.Context, projectID string) ([]*domain.Deployment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, project_id, server_id, name, status, created_at, updated_at
+		 FROM deployments WHERE project_id = ? ORDER BY created_at DESC`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("ListDeploymentsByProject: %w", err)
+	}
+	defer rows.Close()
+	var out []*domain.Deployment
+	for rows.Next() {
+		d, err := scanDeployment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("ListDeploymentsByProject scan: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 // UpdateDeployment updates the mutable fields of a deployment (name, status).
 // UpdatedAt is refreshed to now.
 func (s *Store) UpdateDeployment(ctx context.Context, d *domain.Deployment) error {
