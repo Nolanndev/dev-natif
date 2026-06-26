@@ -1,0 +1,27 @@
+# Runs the dev-natif API in a container, mounting the host Docker socket so the
+# API can drive the local Docker Engine, and a named volume for the SQLite DB.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dev-natif-api:latest
+    container_name: dev-natif-api
+    ports:
+      - "8080:8080"
+    environment:
+      NATIF_PORT: "8080"
+      NATIF_DB_PATH: "/data/natif.db"
+      NATIF_LOG_LEVEL: "info"
+      # The API talks to the engine through the mounted socket.
+      NATIF_DOCKER_HOST: "unix:///var/run/docker.sock"
+      # NATIF_API_KEY: "change-me"   # uncomment to enforce API-key auth
+    volumes:
+      # Host Docker socket -> lets the API control the local engine.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persistent storage for project/deployment data.
+      - natif-data:/data
+    restart: unless-stopped
+
+volumes:
+  natif-data:

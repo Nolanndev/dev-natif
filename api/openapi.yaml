@@ -1,0 +1,418 @@
+openapi: 3.0.3
+info:
+  title: dev-natif — API native Docker
+  description: >
+    API REST native (Go) pilotant le Docker Engine pour modéliser (Projet),
+    déployer (Déploiement), superviser et gérer le cycle de vie d'infrastructures
+    multi-conteneurs. Alternative augmentée à Docker-Compose.
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8080
+    description: Instance locale
+tags:
+  - name: Health
+  - name: Projects
+  - name: Services
+  - name: Volumes
+  - name: Deployments
+  - name: Images
+  - name: Servers
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        services: { type: array, items: { $ref: '#/components/schemas/Service' } }
+        volumes: { type: array, items: { $ref: '#/components/schemas/Volume' } }
+    ProjectInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    Env:
+      type: object
+      properties:
+        key: { type: string }
+        value: { type: string }
+        is_variable: { type: boolean }
+    Port:
+      type: object
+      properties:
+        container_port: { type: integer }
+        host_port: { type: integer }
+        protocol: { type: string, enum: [tcp, udp], default: tcp }
+        is_variable: { type: boolean }
+    Mount:
+      type: object
+      properties:
+        volume_id: { type: string }
+        target: { type: string }
+        read_only: { type: boolean }
+    Service:
+      type: object
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        name: { type: string }
+        image: { type: string }
+        build_context: { type: string }
+        build_dockerfile: { type: string }
+        command: { type: array, items: { type: string } }
+        restart_policy: { type: string }
+        replicas: { type: integer }
+        env: { type: array, items: { $ref: '#/components/schemas/Env' } }
+        ports: { type: array, items: { $ref: '#/components/schemas/Port' } }
+        mounts: { type: array, items: { $ref: '#/components/schemas/Mount' } }
+        depends_on: { type: array, items: { type: string } }
+    ServiceInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        image: { type: string }
+        build_context: { type: string }
+        build_dockerfile: { type: string }
+        command: { type: array, items: { type: string } }
+        restart_policy: { type: string }
+        replicas: { type: integer }
+        env: { type: array, items: { $ref: '#/components/schemas/Env' } }
+        ports: { type: array, items: { $ref: '#/components/schemas/Port' } }
+        mounts: { type: array, items: { $ref: '#/components/schemas/Mount' } }
+        depends_on: { type: array, items: { type: string } }
+    Volume:
+      type: object
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        name: { type: string }
+        driver: { type: string }
+    VolumeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        driver: { type: string }
+    Override:
+      type: object
+      properties:
+        kind: { type: string, enum: [env, port] }
+        target_ref: { type: string, description: "ID du service ciblé" }
+        key: { type: string, description: "clé env, ou '<containerPort>/<proto>' pour un port" }
+        value: { type: string }
+    Container:
+      type: object
+      properties:
+        id: { type: string }
+        deployment_id: { type: string }
+        service_id: { type: string }
+        docker_container_id: { type: string }
+        name: { type: string }
+        state: { type: string }
+        health: { type: string }
+        created_at: { type: string, format: date-time }
+    Deployment:
+      type: object
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        server_id: { type: string }
+        name: { type: string }
+        status:
+          type: string
+          enum: [pending, running, partially-running, not-running, failed]
+        overrides: { type: array, items: { $ref: '#/components/schemas/Override' } }
+        containers: { type: array, items: { $ref: '#/components/schemas/Container' } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    DeploymentInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        server_id: { type: string }
+        overrides: { type: array, items: { $ref: '#/components/schemas/Override' } }
+    StatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, running, partially-running, not-running, failed]
+        containers: { type: array, items: { $ref: '#/components/schemas/Container' } }
+    Server:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        host: { type: string }
+        status: { type: string }
+    PullImageInput:
+      type: object
+      required: [ref]
+      properties:
+        ref: { type: string }
+        auth: { type: string, description: "X-Registry-Auth base64 (optionnel)" }
+    BuildImageInput:
+      type: object
+      required: [context_dir, tag]
+      properties:
+        context_dir: { type: string }
+        dockerfile: { type: string }
+        tag: { type: string }
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      security: []
+      summary: Liveness
+      responses:
+        '200': { description: OK }
+  /readyz:
+    get:
+      tags: [Health]
+      security: []
+      summary: Readiness (inclut le Docker Engine)
+      responses:
+        '200': { description: Prêt }
+        '503': { description: Docker Engine injoignable }
+
+  /api/v1/projects:
+    post:
+      tags: [Projects]
+      summary: Créer un projet
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectInput' } } }
+      responses:
+        '201': { description: Créé, content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } } }
+        '400': { description: Validation, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Conflit, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      tags: [Projects]
+      summary: Lister les projets
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Project' } } } } }
+
+  /api/v1/projects/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Projects]
+      summary: Détail d'un projet (hydraté)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } } }
+        '404': { description: Introuvable }
+    put:
+      tags: [Projects]
+      summary: Mettre à jour un projet
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectInput' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Project' } } } }
+        '404': { description: Introuvable }
+    delete:
+      tags: [Projects]
+      summary: Supprimer un projet (cascade)
+      responses:
+        '204': { description: Supprimé }
+        '404': { description: Introuvable }
+
+  /api/v1/projects/{id}/services:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Services]
+      summary: Ajouter un service
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ServiceInput' } } }
+      responses:
+        '201': { description: Créé, content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } } }
+        '400': { description: Validation }
+        '404': { description: Projet introuvable }
+    get:
+      tags: [Services]
+      summary: Lister les services
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Service' } } } } }
+
+  /api/v1/projects/{id}/services/{sid}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: sid, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [Services]
+      summary: Mettre à jour un service
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ServiceInput' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } } }
+        '404': { description: Introuvable }
+    delete:
+      tags: [Services]
+      summary: Supprimer un service
+      responses:
+        '204': { description: Supprimé }
+        '404': { description: Introuvable }
+
+  /api/v1/projects/{id}/volumes:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Volumes]
+      summary: Ajouter un volume
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VolumeInput' } } }
+      responses:
+        '201': { description: Créé, content: { application/json: { schema: { $ref: '#/components/schemas/Volume' } } } }
+        '400': { description: Validation }
+        '404': { description: Projet introuvable }
+    get:
+      tags: [Volumes]
+      summary: Lister les volumes
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Volume' } } } } }
+
+  /api/v1/projects/{id}/volumes/{vid}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: vid, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [Volumes]
+      summary: Supprimer un volume
+      responses:
+        '204': { description: Supprimé }
+        '404': { description: Introuvable }
+
+  /api/v1/projects/{id}/deployments:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Deployments]
+      summary: Créer un déploiement
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentInput' } } }
+      responses:
+        '201': { description: Créé, content: { application/json: { schema: { $ref: '#/components/schemas/Deployment' } } } }
+        '400': { description: Validation }
+        '404': { description: Projet/serveur introuvable }
+
+  /api/v1/deployments:
+    get:
+      tags: [Deployments]
+      summary: Lister les déploiements
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Deployment' } } } } }
+
+  /api/v1/deployments/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Deployments]
+      summary: Détail d'un déploiement
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Deployment' } } } }
+        '404': { description: Introuvable }
+    delete:
+      tags: [Deployments]
+      summary: Supprimer un déploiement (down best-effort puis suppression)
+      responses:
+        '204': { description: Supprimé }
+        '404': { description: Introuvable }
+
+  /api/v1/deployments/{id}/up:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Deployments]
+      summary: Instancier le déploiement
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Deployment' } } } }
+        '404': { description: Introuvable }
+        '422': { description: Cycle de dépendances }
+        '502': { description: Erreur Docker Engine }
+
+  /api/v1/deployments/{id}/down:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Deployments]
+      summary: Arrêter et supprimer les conteneurs
+      responses:
+        '200': { description: OK }
+        '404': { description: Introuvable }
+        '502': { description: Erreur Docker Engine }
+
+  /api/v1/deployments/{id}/status:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Deployments]
+      summary: État agrégé en direct
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StatusResponse' } } } }
+        '404': { description: Introuvable }
+
+  /api/v1/images/pull:
+    post:
+      tags: [Images]
+      summary: Pull d'une image
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PullImageInput' } } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Validation }
+        '502': { description: Erreur Docker Engine }
+
+  /api/v1/images/build:
+    post:
+      tags: [Images]
+      summary: Build d'une image
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BuildImageInput' } } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Validation }
+        '502': { description: Erreur Docker Engine }
+
+  /api/v1/servers:
+    get:
+      tags: [Servers]
+      summary: Lister les serveurs
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Server' } } } } }
+
+  /api/v1/servers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Servers]
+      summary: Détail d'un serveur
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Server' } } } }
+        '404': { description: Introuvable }
