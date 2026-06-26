@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/actigraph/dev-natif/internal/domain"
+	"github.com/Nolanndev/dev-natif/internal/domain"
 )
 
 func (h *handler) createProject(c *gin.Context) {
@@ -55,7 +55,11 @@ func (h *handler) updateProject(c *gin.Context) {
 }
 
 func (h *handler) deleteProject(c *gin.Context) {
-	if err := h.d.Projects.DeleteProject(c.Request.Context(), c.Param("id")); err != nil {
+	id := c.Param("id")
+	// Tear down any running containers of this project before deleting its
+	// records, so nothing is orphaned on the engine. Best effort.
+	_ = h.d.Deployments.DownProject(c.Request.Context(), id)
+	if err := h.d.Projects.DeleteProject(c.Request.Context(), id); err != nil {
 		fail(c, err)
 		return
 	}

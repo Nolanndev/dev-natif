@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dev-natif · Console</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%237c5cff'/><text x='50' y='68' font-size='58' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'>n</text></svg>" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="logo">n</div>
+        <div>
+          <b>dev-natif</b>
+          <small>Console Docker</small>
+        </div>
+      </div>
+      <nav class="nav" id="nav">
+        <span class="nav-label">Pilotage</span>
+        <button data-view="projects" class="active">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>
+          Projets
+        </button>
+        <button data-view="deployments">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 0l3-3m-3 3L9 5"/><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 15h.01M12 15h.01"/></svg>
+          Déploiements
+        </button>
+        <span class="nav-label">Ressources</span>
+        <button data-view="images">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+          Images
+        </button>
+        <button data-view="servers">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 8h.01M7 17h.01"/></svg>
+          Serveurs
+        </button>
+      </nav>
+      <div class="sidebar-foot">
+        <button class="btn btn-ghost" id="settings-btn" style="width:100%; justify-content:flex-start; margin-bottom:8px;">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Réglages
+        </button>
+        <div class="engine-pill" id="engine-pill" title="État du Docker Engine">
+          <span class="badge neutral"><span class="dot"></span>Engine</span>
+          <span id="engine-text">…</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-toggle" id="menu-toggle" aria-label="Menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+        <div>
+          <h1 id="view-title">Projets</h1>
+          <div class="sub" id="view-sub">Vos descriptions d'infrastructure</div>
+        </div>
+        <div class="spacer"></div>
+        <div id="topbar-actions" class="toolbar"></div>
+      </header>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

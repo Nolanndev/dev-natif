@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/actigraph/dev-natif/internal/domain"
+	"github.com/Nolanndev/dev-natif/internal/domain"
 )
 
 // errorResponse is the uniform error envelope.

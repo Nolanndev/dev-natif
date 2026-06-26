@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/actigraph/dev-natif/internal/domain"
+	"github.com/Nolanndev/dev-natif/internal/domain"
 )
 
 // ----------------------------------------------------------------------------

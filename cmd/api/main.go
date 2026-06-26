@@ -15,12 +15,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/actigraph/dev-natif/internal/config"
-	dockeng "github.com/actigraph/dev-natif/internal/docker"
-	httpapi "github.com/actigraph/dev-natif/internal/http"
-	"github.com/actigraph/dev-natif/internal/logging"
-	"github.com/actigraph/dev-natif/internal/service"
-	"github.com/actigraph/dev-natif/internal/store"
+	"github.com/Nolanndev/dev-natif/internal/config"
+	dockeng "github.com/Nolanndev/dev-natif/internal/docker"
+	httpapi "github.com/Nolanndev/dev-natif/internal/http"
+	"github.com/Nolanndev/dev-natif/internal/logging"
+	"github.com/Nolanndev/dev-natif/internal/service"
+	"github.com/Nolanndev/dev-natif/internal/store"
 )
 
 func main() {

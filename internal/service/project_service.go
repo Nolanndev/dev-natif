@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/actigraph/dev-natif/internal/domain"
+	"github.com/Nolanndev/dev-natif/internal/domain"
 )
 
 // ProjectService implements the use cases around the abstract description of an

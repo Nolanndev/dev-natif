@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/actigraph/dev-natif/internal/domain"
+	"github.com/Nolanndev/dev-natif/internal/domain"
 )
 
 // GetServer returns the server with the given id, or domain.ErrNotFound.

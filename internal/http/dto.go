@@ -1,6 +1,6 @@
 package httpapi
 
-import "github.com/actigraph/dev-natif/internal/domain"
+import "github.com/Nolanndev/dev-natif/internal/domain"
 
 // ---- Project DTOs ----------------------------------------------------------
 

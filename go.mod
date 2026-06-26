@@ -1,4 +1,4 @@
-module github.com/actigraph/dev-natif
+module github.com/Nolanndev/dev-natif
 
 go 1.23
 

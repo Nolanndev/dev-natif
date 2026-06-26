@@ -1,6 +1,6 @@
 package store
 
-import "github.com/actigraph/dev-natif/internal/domain"
+import "github.com/Nolanndev/dev-natif/internal/domain"
 
 // Package-level aliases so all repository files reference the same sentinel
 // values without repeating the import path.

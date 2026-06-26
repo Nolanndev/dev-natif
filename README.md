@@ -64,6 +64,10 @@ curl -s localhost:8080/healthz   # {"status":"ok"}
 curl -s localhost:8080/readyz    # {"docker_engine":"ok","status":"ready"}
 ```
 
+Puis **ouvre la console web** : <http://localhost:8080/> — une interface graphique qui
+couvre tout le projet (projets, services, volumes, déploiements, images, serveurs,
+supervision en direct). Voir [Console web](#console-web).
+
 Ou directement avec Docker :
 
 ```bash
@@ -141,6 +145,30 @@ curl -s -X DELETE $B/projects/$PID
 
 ---
 
+## Console web
+
+Une **interface graphique** est embarquée dans le binaire (via `go:embed`) et servie
+en *same-origin* sur <http://localhost:8080/> — **aucun conteneur ni build Node
+supplémentaire**, l'image reste ~35 Mo.
+
+Elle couvre l'intégralité du projet :
+
+- **Projets** : créer, lister, ouvrir le détail, supprimer.
+- **Services** : formulaire riche (image/build, commande, restart, replicas,
+  variables d'env avec marquage *variable*, ports avec marquage *variable*,
+  montages de volumes, dépendances `depends_on`).
+- **Volumes** : ajout/suppression par projet.
+- **Déploiements** : création avec **overrides** (les variables du projet sont
+  proposées automatiquement), `up` / `down`, détail avec **supervision en direct**
+  (badge d'état, conteneurs, santé, rafraîchissement automatique).
+- **Images** : `pull` et `build`.
+- **Serveurs** : liste de la cible Docker Engine.
+- **Réglages** : clé d'API (`X-API-Key`) stockée localement ; indicateur de santé
+  du Docker Engine.
+
+Stack front : **vanilla JS + CSS**, zéro dépendance, zéro build. Thème sombre,
+URLs par hash (rafraîchissement et bouton retour pris en charge), responsive.
+
 ## Aperçu de l'API
 
 Base : `/api/v1`. Référence complète : [`docs/API.md`](docs/API.md) et la spec
@@ -170,7 +198,8 @@ internal/domain    → entités + PORTS (interfaces) : repos & DockerEngine
 internal/store     → adapter SQLite (modernc.org/sqlite)
 internal/docker    → adapter Docker Engine (SDK officiel)
 internal/service   → use-cases (overrides, tri topologique, up/down, statut)
-internal/http      → couche Gin (router, middleware, handlers, DTO)
+internal/http      → couche Gin (router, middleware, handlers, DTO) + UI embarquée
+internal/http/web  → console web (SPA statique : index.html, app.js, styles.css)
 internal/config    → configuration par environnement
 internal/logging   → logger structuré slog
 ```

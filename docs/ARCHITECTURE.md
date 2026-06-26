@@ -41,7 +41,8 @@ et se testent contre des **interfaces**, et les adaptateurs sont interchangeable
 | `internal/store` | Implémente les 3 *Repository* via SQLite (`modernc.org/sqlite`, pur-Go). Migrations embarquées. | `domain` |
 | `internal/docker` | Implémente `DockerEngine` via le SDK Docker officiel. | `domain` |
 | `internal/service` | **Use-cases** : validation, résolution des overrides, tri topologique des dépendances, orchestration `up`/`down`, calcul d'état. | `domain` |
-| `internal/http` | Couche de livraison **Gin** : router, middlewares (request-id, log, recovery, api-key), DTO, handlers, mapping erreur→HTTP. | `domain`, `service` |
+| `internal/http` | Couche de livraison **Gin** : router, middlewares (request-id, log, recovery, api-key), DTO, handlers, mapping erreur→HTTP. Sert aussi la **console web** embarquée. | `domain`, `service` |
+| `internal/http/web` | **Console web** : SPA statique (vanilla JS/CSS, sans build) embarquée via `go:embed`, servie *same-origin* sur `/` (redirige vers `/app/`). Consomme uniquement `/api/v1`. | *(assets statiques)* |
 
 ## 3. Les ports (contrats)
 

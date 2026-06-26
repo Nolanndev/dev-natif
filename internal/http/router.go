@@ -2,11 +2,12 @@ package httpapi
 
 import (
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/actigraph/dev-natif/internal/domain"
-	"github.com/actigraph/dev-natif/internal/service"
+	"github.com/Nolanndev/dev-natif/internal/domain"
+	"github.com/Nolanndev/dev-natif/internal/service"
 )
 
 // Deps holds everything the HTTP layer needs. main.go constructs it.
@@ -30,6 +31,10 @@ func NewRouter(d Deps) *gin.Engine {
 	r.Use(requestID(), requestLogger(d.Logger), recovery(d.Logger))
 
 	h := &handler{d: d}
+
+	// Embedded web console (single-page app), served same-origin at /app.
+	r.StaticFS("/app", http.FS(webRoot()))
+	r.GET("/", func(c *gin.Context) { c.Redirect(http.StatusFound, "/app/") })
 
 	// Operational endpoints (no auth).
 	r.GET("/healthz", h.healthz)

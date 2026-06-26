@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/actigraph/dev-natif/internal/domain"
+	"github.com/Nolanndev/dev-natif/internal/domain"
 )
 
 func validation(format string, args ...any) error {

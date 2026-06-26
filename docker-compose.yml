@@ -17,7 +17,7 @@ services:
       NATIF_DOCKER_HOST: "unix:///var/run/docker.sock"
       # NATIF_API_KEY: "change-me"   # uncomment to enforce API-key auth
     volumes:
-      # Host Docker socket -> lets the API control the local engine.
+      # Host Docker socke<t -> lets the API control the local engine.
       - /var/run/docker.sock:/var/run/docker.sock
       # Persistent storage for project/deployment data.
       - natif-data:/data

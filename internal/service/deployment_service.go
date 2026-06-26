@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/actigraph/dev-natif/internal/domain"
+	"github.com/Nolanndev/dev-natif/internal/domain"
 )
 
 // DeploymentService orchestrates the materialisation of a project on a Docker
@@ -189,6 +189,26 @@ func (s *DeploymentService) Down(ctx context.Context, id string) error {
 	dep.Status = domain.StatusNotRunning
 	dep.UpdatedAt = time.Now().UTC()
 	return s.deployments.UpdateDeployment(ctx, dep)
+}
+
+// DownProject stops and removes every container the API created for a project,
+// across all of its deployments (found by the project label). Used before a
+// project is deleted so no orphan containers are left on the engine. Volumes are
+// kept, consistent with Down semantics. Best effort: errors are returned but the
+// loop tries every container first.
+func (s *DeploymentService) DownProject(ctx context.Context, projectID string) error {
+	infos, err := s.engine.ListContainersByLabel(ctx, map[string]string{domain.LabelProject: projectID})
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, info := range infos {
+		_ = s.engine.StopContainer(ctx, info.ID)
+		if rerr := s.engine.RemoveContainer(ctx, info.ID, true); rerr != nil && firstErr == nil {
+			firstErr = rerr
+		}
+	}
+	return firstErr
 }
 
 // Status returns the live aggregated state plus the refreshed container list.
